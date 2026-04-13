@@ -11,7 +11,10 @@
       "Bash(npm run:*)",
       "Bash(cd E:\\\\\\\\hackathon\\\\\\\\lifi)",
       "WebFetch(domain:docs.li.fi)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(xargs kill:*)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill //PID 42208 //F)"
     ]
   }
 }

@@ -2,9 +2,15 @@
  * API 路由：/api/vaults
  *
  * 这是一个 Next.js Server Route（服务端 API）。
- * 对应前端的请求：GET /api/vaults?chainId=8453
+ * 对应前端的请求：GET /api/vaults?chainId=8453&sortBy=apy&minTvlUsd=100000
  *
- * 它作为代理，转发请求到 LI.FI Earn API，并对返回数据做过滤和排序。
+ * 它作为代理，转发请求到 LI.FI Earn API，利用其原生参数进行排序和过滤，
+ * 并对返回数据做精简处理。
+ *
+ * 支持的查询参数：
+ *   chainId    - 链 ID（如 8453），可选
+ *   sortBy     - 排序方式：'apy'（默认）或 'tvl'
+ *   minTvlUsd  - 最小 TVL（美元），过滤掉太小的金库
  *
  * 为什么需要代理而不是前端直接请求 LI.FI？
  * 1. 隐藏 API 实现细节
@@ -18,14 +24,21 @@ import { NextRequest, NextResponse } from 'next/server';
 const EARN_API = 'https://earn.li.fi';
 
 export async function GET(request: NextRequest) {
-  // 从 URL query 中获取 chainId 参数（如 ?chainId=8453）
   const { searchParams } = request.nextUrl;
   const chainId = searchParams.get('chainId');
+  const sortBy = searchParams.get('sortBy');        // 'apy' | 'tvl'
+  const minTvlUsd = searchParams.get('minTvlUsd');  // 最小 TVL（美元）
 
   try {
     // 构建转发给 LI.FI Earn API 的查询参数
     const params = new URLSearchParams();
     if (chainId) params.set('chainId', chainId);
+
+    // 排序方式：默认按 APY 排序
+    params.set('sortBy', sortBy === 'tvl' ? 'tvl' : 'apy');
+
+    // 最小 TVL 过滤：默认 100,000 美元，过滤掉流动性太小的金库
+    params.set('minTvlUsd', minTvlUsd || '100000');
 
     const url = `${EARN_API}/v1/earn/vaults?${params.toString()}`;
     const res = await fetch(url, {
@@ -68,12 +81,6 @@ export async function GET(request: NextRequest) {
         },
         isRedeemable: v.isRedeemable,               // 是否可赎回
       }));
-
-    // 按 APY 降序排列，高收益排在前面
-    vaults.sort(
-      (a: any, b: any) =>
-        (b.analytics.apy.total || 0) - (a.analytics.apy.total || 0)
-    );
 
     return NextResponse.json({ vaults, total: vaults.length });
   } catch (error) {
