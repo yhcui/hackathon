@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(curl:*)",
+      "WebFetch(domain:portal.li.fi)",
+      "Bash(npm --version)",
+      "Bash(npx create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --no-import-alias --use-npm)",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "Bash(cd E:\\\\\\\\hackathon\\\\\\\\lifi)",
+      "WebFetch(domain:docs.li.fi)"
+    ]
+  }
+}
