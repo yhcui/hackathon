@@ -16,8 +16,20 @@ import '@rainbow-me/rainbowkit/styles.css';
 import { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { WagmiProvider, createConfig, http } from 'wagmi';
-import { base, arbitrum, mainnet, optimism, polygon } from 'wagmi/chains';
+import { base, arbitrum, mainnet, optimism, polygon, baseSepolia, arbitrumSepolia, sepolia, optimismSepolia, polygonAmoy } from 'wagmi/chains';
 import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit';
+
+/**
+ * 通过环境变量控制测试网/主网
+ *
+ * 在 .env.local 中设置 NEXT_PUBLIC_USE_TESTNET=true 即可切换到测试网
+ */
+const isTestnet = process.env.NEXT_PUBLIC_USE_TESTNET === 'true';
+
+// 根据环境变量选择链列表
+const chains = isTestnet
+  ? [baseSepolia, arbitrumSepolia, sepolia, optimismSepolia, polygonAmoy]
+  : [base, arbitrum, mainnet, optimism, polygon];
 
 /**
  * wagmi 配置
@@ -28,13 +40,18 @@ import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit';
  *   http(`https://mainnet.infura.io/v3/${INFURA_KEY}`)
  */
 export const wagmiConfig = createConfig({
-  chains: [base, arbitrum, mainnet, optimism, polygon],
+  chains,
   transports: {
     [base.id]: http(),
     [arbitrum.id]: http(),
     [mainnet.id]: http(),
     [optimism.id]: http(),
     [polygon.id]: http(),
+    [baseSepolia.id]: http(),
+    [arbitrumSepolia.id]: http(),
+    [sepolia.id]: http(),
+    [optimismSepolia.id]: http(),
+    [polygonAmoy.id]: http(),
   },
 });
 

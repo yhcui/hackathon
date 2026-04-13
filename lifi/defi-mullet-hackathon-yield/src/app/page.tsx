@@ -30,13 +30,28 @@ import { parseUnits } from 'viem';
  * id 是链的 chainId（如 Base = 8453），name 是显示名称。
  * 这些链必须也在 wagmi.tsx 的 chains 数组中注册过。
  */
-const CHAINS = [
-  { id: 8453, name: 'Base', slug: 'base' },
-  { id: 42161, name: 'Arbitrum', slug: 'arbitrum' },
-  { id: 1, name: 'Ethereum', slug: 'ethereum' },
-  { id: 10, name: 'Optimism', slug: 'optimism' },
-  { id: 137, name: 'Polygon', slug: 'polygon' },
-];
+/**
+ * 支持的链列表（与 wagmi.tsx 保持一致）
+ *
+ * 通过环境变量 NEXT_PUBLIC_USE_TESTNET=true 自动切换为测试网
+ */
+const isTestnet = process.env.NEXT_PUBLIC_USE_TESTNET === 'true';
+
+const CHAINS = isTestnet
+  ? [
+      { id: 84532, name: 'Base Sepolia', slug: 'base-sepolia' },
+      { id: 421614, name: 'Arbitrum Sepolia', slug: 'arbitrum-sepolia' },
+      { id: 11155111, name: 'Sepolia', slug: 'sepolia' },
+      { id: 11155420, name: 'Optimism Sepolia', slug: 'optimism-sepolia' },
+      { id: 80002, name: 'Polygon Amoy', slug: 'polygon-amoy' },
+    ]
+  : [
+      { id: 8453, name: 'Base', slug: 'base' },
+      { id: 42161, name: 'Arbitrum', slug: 'arbitrum' },
+      { id: 1, name: 'Ethereum', slug: 'ethereum' },
+      { id: 10, name: 'Optimism', slug: 'optimism' },
+      { id: 137, name: 'Polygon', slug: 'polygon' },
+    ];
 
 /**
  * Vault（金库）数据结构
