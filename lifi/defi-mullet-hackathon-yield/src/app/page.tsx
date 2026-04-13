@@ -19,7 +19,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount, useSendTransaction, useSwitchChain } from 'wagmi';
 import { parseUnits } from 'viem';
@@ -110,6 +110,14 @@ export default function Home() {
   const [txStatus, setTxStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   /** 错误信息 */
   const [errorMsg, setErrorMsg] = useState('');
+
+  // ──────────────────────────────────────────
+  // 页面加载时自动获取默认链的金库列表
+  // ──────────────────────────────────────────
+  useEffect(() => {
+    handleChainSelect(CHAINS[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ──────────────────────────────────────────
   // Step 1: 选择链 → 获取该链上的金库列表
