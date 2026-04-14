@@ -24,6 +24,10 @@ import Link from 'next/link';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount, useSendTransaction, useSwitchChain, useWriteContract } from 'wagmi';
 import { parseUnits, erc20Abi, createPublicClient, http } from 'viem';
+import {
+  base, arbitrum, mainnet, optimism, polygon,
+  baseSepolia, arbitrumSepolia, sepolia, optimismSepolia, polygonAmoy,
+} from 'wagmi/chains';
 
 /**
  * 支持的链列表
@@ -185,6 +189,8 @@ export default function Home() {
     setErrorMsg('');
 
     try {
+      console.log('1111111111111walletChainId:', walletChainId);
+
       // 获取金库的底层代币（通常是存入该金库需要的代币）
       const token = selectedVault.underlyingTokens[0];
       if (!token) {
@@ -217,6 +223,7 @@ export default function Home() {
 
       // 如果钱包连接的链不是目标链，尝试自动切换
       const targetChainId = selectedVault.chainId;
+      console.log('walletChainId', walletChainId);
       if (walletChainId !== targetChainId) {
         try {
           await switchChain({ chainId: targetChainId });
@@ -235,11 +242,24 @@ export default function Home() {
       // 如果 allowance < amount，需要先调用 approve。
       const approvalAddress = quote.estimate?.approvalAddress;
       if (approvalAddress && approvalAddress !== '0x0000000000000000000000000000000000000000') {
-        // 动态创建 publicClient 用于读取链上数据
-        const client = createPublicClient({
-          chain: { id: selectedVault.chainId } as any,
-          transport: http(),
-        });
+        // 创建对应链的 public client（使用 wagmi/chains 的完整链配置）
+        const chainMap: Record<number, typeof base> = {
+          1: mainnet,
+          10: optimism,
+          137: polygon,
+          42161: arbitrum,
+          8453: base,
+          11155111: sepolia,
+          11155420: optimismSepolia,
+          80002: polygonAmoy,
+          84532: baseSepolia,
+          421614: arbitrumSepolia,
+        };
+        const chain = chainMap[selectedVault.chainId];
+        if (!chain) {
+          throw new Error('Unsupported chain: ' + selectedVault.chainId);
+        }
+        const client = createPublicClient({ chain, transport: http() });
 
         // 检查当前授权额度
         const allowance = await client.readContract({
@@ -599,6 +619,10 @@ export default function Home() {
                 <span className="text-indigo-400 font-bold">
                   {selectedVault.analytics.apy.total?.toFixed(2)}%
                 </span>
+              </div>
+              <div className="flex justify-between border-t border-gray-700 pt-3">
+                <span className="text-gray-400">Est. Gas Fee</span>
+                <span className="text-sm">~0.005-0.01 ETH</span>
               </div>
             </div>
 
