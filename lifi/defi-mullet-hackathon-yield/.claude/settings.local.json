@@ -31,7 +31,11 @@
       "Bash(taskkill:*)",
       "Bash(kill 9608:*)",
       "Bash(findstr LISTENING)",
-      "Bash(powershell:*)"
+      "Bash(powershell:*)",
+      "Bash(NEXT_TURBOPACK=0 npm run build)",
+      "Bash(cp -r D:/github/hackathon/lifi/defi-mullet-hackathon-yield/.next/static D:/github/hackathon/lifi/defi-mullet-hackathon-yield/.next/standalone/.next/)",
+      "Bash(cp -r D:/github/hackathon/lifi/defi-mullet-hackathon-yield/public D:/github/hackathon/lifi/defi-mullet-hackathon-yield/.next/standalone/)",
+      "Bash(tar czf:*)"
     ]
   }
 }

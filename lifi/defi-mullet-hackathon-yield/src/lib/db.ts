@@ -6,6 +6,7 @@
  * 无需安装原生依赖，跨平台兼容。
  */
 
+// @ts-ignore - node:sqlite is experimental
 import { DatabaseSync } from 'node:sqlite';
 import path from 'path';
 import fs from 'fs';

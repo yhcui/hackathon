@@ -69,7 +69,9 @@ const USE_DIRECT_DEPOSIT = true;
  * 链 ID → wagmi chain 对象映射
  * 用于创建 viem public client（需要完整的链配置）
  */
-const CHAIN_MAP: Record<number, typeof base> = {
+import type { Chain } from 'wagmi/chains';
+
+const CHAIN_MAP: Record<number, Chain> = {
   1: mainnet, 10: optimism, 137: polygon, 42161: arbitrum, 8453: base,
   11155111: sepolia, 11155420: optimismSepolia, 80002: polygonAmoy,
   84532: baseSepolia, 421614: arbitrumSepolia,
