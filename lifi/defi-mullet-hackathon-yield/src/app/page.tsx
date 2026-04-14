@@ -362,7 +362,10 @@ export default function Home() {
               protocolName: selectedVault.protocol.name,
               vaultName: selectedVault.name,
               network: selectedVault.network,
-              depositedAmountUsd: 0,
+              depositedAmountUsd: parseFloat(amount) * (
+                ['USDC', 'USDT', 'DAI', 'FRAX', 'BUSD'].includes(token.symbol.toUpperCase())
+                  ? 1 : 0
+              ),
               tokenSymbol: token.symbol,
               tokenAmount: amount,
             }),

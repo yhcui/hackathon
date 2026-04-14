@@ -1,29 +1,30 @@
 /**
  * SQLite 数据库模块
  *
- * 使用 better-sqlite3 存储用户存款记录，替代 localStorage 方案。
+ * 使用 Node.js 内置的 node:sqlite 模块存储用户存款记录。
  * 优点：数据持久化在服务器端，不因清除浏览器数据而丢失。
+ * 无需安装原生依赖，跨平台兼容。
  */
 
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import path from 'path';
+import fs from 'fs';
 
 const DB_PATH = path.join(process.cwd(), 'data', 'earnflow.db');
 
-let db: Database.Database | null = null;
+let db: DatabaseSync | null = null;
 
-export function getDb(): Database.Database {
+export function getDb(): DatabaseSync {
   if (db) return db;
 
   // 确保 data 目录存在
-  const fs = require('fs');
   const dataDir = path.dirname(DB_PATH);
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
   }
 
-  db = new Database(DB_PATH);
-  db.pragma('journal_mode = WAL');
+  db = new DatabaseSync(DB_PATH);
+  db.exec(`PRAGMA journal_mode = WAL`);
 
   // 创建存款记录表
   db.exec(`

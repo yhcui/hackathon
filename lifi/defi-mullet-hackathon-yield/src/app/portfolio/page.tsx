@@ -66,11 +66,16 @@ const CHAINS: Record<number, string> = {
 
 export default function PortfolioPage() {
   const { address, isConnected } = useAccount();
+  const [mounted, setMounted] = useState(false);
 
   const [positions, setPositions] = useState<Position[]>([]);
   const [baselines, setBaselines] = useState<DepositRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const fetchPortfolio = async () => {
     if (!address) return;
@@ -105,11 +110,11 @@ export default function PortfolioPage() {
   }, [address]);
 
   const mergedPositions: MergedPosition[] = positions.map((pos) => {
-    // Find matching baselines by chainId + vault contract address
+    // Find matching baselines by chainId + token symbol
     const matchingBaselines = baselines.filter(
       (b) =>
         b.chainId === pos.chainId &&
-        b.vaultAddress.toLowerCase() === pos.asset.address.toLowerCase()
+        b.tokenSymbol.toLowerCase() === pos.asset.symbol.toLowerCase()
     );
 
     const totalDepositedUsd = matchingBaselines.reduce(
@@ -187,7 +192,7 @@ export default function PortfolioPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {address && (
+            {mounted && address && (
               <button
                 onClick={fetchPortfolio}
                 disabled={loading}
@@ -210,7 +215,7 @@ export default function PortfolioPage() {
 
       <main className="max-w-4xl mx-auto px-4 py-8">
         {/* Not connected state */}
-        {!isConnected && (
+        {mounted && !isConnected && (
           <div className="bg-gray-900 rounded-xl p-8 border border-gray-800 text-center">
             <div className="text-4xl mb-4">🔗</div>
             <h2 className="text-lg font-semibold mb-2">Connect Your Wallet</h2>
@@ -222,12 +227,12 @@ export default function PortfolioPage() {
         )}
 
         {/* Loading state */}
-        {isConnected && loading && (
+        {mounted && isConnected && loading && (
           <div className="text-center py-16 text-gray-400">Loading portfolio...</div>
         )}
 
         {/* Error state */}
-        {isConnected && error && !loading && (
+        {mounted && isConnected && error && !loading && (
           <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 text-red-400 text-sm text-center">
             {error}
             <button
@@ -253,7 +258,7 @@ export default function PortfolioPage() {
         )}
 
         {/* Portfolio content */}
-        {isConnected && !loading && !error && (
+        {mounted && isConnected && !loading && !error && (
           <>
             {/* Address badge */}
             {address && (
