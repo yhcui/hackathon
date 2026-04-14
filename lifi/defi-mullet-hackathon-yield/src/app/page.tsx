@@ -59,6 +59,55 @@ const CHAINS = isTestnet
     ];
 
 /**
+ * 存款方式配置
+ * true = 直接调用 vault 合约（低 gas，ERC4626/Aave）
+ * false = 使用 LI.FI Composer 路由（支持 swap/跨链）
+ */
+const USE_DIRECT_DEPOSIT = true;
+
+/**
+ * 链 ID → wagmi chain 对象映射
+ * 用于创建 viem public client（需要完整的链配置）
+ */
+const CHAIN_MAP: Record<number, typeof base> = {
+  1: mainnet, 10: optimism, 137: polygon, 42161: arbitrum, 8453: base,
+  11155111: sepolia, 11155420: optimismSepolia, 80002: polygonAmoy,
+  84532: baseSepolia, 421614: arbitrumSepolia,
+};
+
+/**
+ * ERC4626 标准存款接口 ABI
+ * Morpho、Euler 等协议使用此标准：deposit(assets, receiver) → shares
+ */
+const ERC4626_ABI = [{
+  name: 'deposit',
+  type: 'function',
+  stateMutability: 'nonpayable',
+  inputs: [
+    { type: 'uint256', name: 'assets' },
+    { type: 'address', name: 'receiver' },
+  ],
+  outputs: [{ type: 'uint256', name: 'shares' }],
+}] as const;
+
+/**
+ * Aave v3 存款接口 ABI
+ * supply(asset, amount, onBehalfOf, referralCode)
+ */
+const AAVE_V3_ABI = [{
+  name: 'supply',
+  type: 'function',
+  stateMutability: 'nonpayable',
+  inputs: [
+    { type: 'address', name: 'asset' },
+    { type: 'uint256', name: 'amount' },
+    { type: 'address', name: 'onBehalfOf' },
+    { type: 'uint16', name: 'referralCode' },
+  ],
+  outputs: [],
+}] as const;
+
+/**
  * Vault（金库）数据结构
  *
  * 金库 = 一个可以存入并获取收益的 DeFi 协议中的资金池。
@@ -93,7 +142,7 @@ export default function Home() {
   /** useSwitchChain: 切换链 */
   const { switchChain } = useSwitchChain();
   /** useSendTransaction: 发送普通交易（非合约调用） */
-  const { sendTransactionAsync } = useSendTransaction();
+  const { sendTransactionAsync, data: txHash } = useSendTransaction();
   /** useWriteContract: 调用合约方法（用于 approve） */
   const { writeContractAsync } = useWriteContract();
 
@@ -117,6 +166,44 @@ export default function Home() {
   const [txStatus, setTxStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   /** 错误信息 */
   const [errorMsg, setErrorMsg] = useState('');
+
+  // 监听交易 hash，当交易发送成功时更新 UI 状态
+  // 这解决了 sendTransactionAsync 在钱包确认后可能卡住的问题
+  useEffect(() => {
+    if (txHash && txStatus === 'loading') {
+      setTxStatus('success');
+      console.log('Transaction sent:', txHash);
+
+      // 保存存款记录到服务器端 SQLite 数据库
+      if (selectedVault && address && amount) {
+        const token = selectedVault.underlyingTokens[0];
+        fetch('/api/deposit-record', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            address,
+            chainId: selectedVault.chainId,
+            vaultAddress: selectedVault.address,
+            protocolName: selectedVault.protocol.name,
+            vaultName: selectedVault.name,
+            network: selectedVault.network,
+            depositedAmountUsd: 0,
+            tokenSymbol: token?.symbol || 'Unknown',
+            tokenAmount: amount,
+          }),
+        })
+          .then((r) => r.json())
+          .then((data) => {
+            if (data.success) {
+              console.log('Deposit record saved');
+            } else {
+              console.error('Failed to save deposit record:', data.error);
+            }
+          })
+          .catch((err) => console.error('Failed to save deposit record:', err));
+      }
+    }
+  }, [txHash, txStatus, selectedVault, address, amount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ──────────────────────────────────────────
   // 页面加载时自动获取默认链的金库列表
@@ -174,13 +261,13 @@ export default function Home() {
   /**
    * 执行存入操作，这是整个流程的核心：
    *
-   * 1. 获取金库的底层代币信息
-   * 2. 将用户输入的人类可读金额（如 "1.5"）转为 wei（如 "1500000000000000000"）
-   * 3. 调用 /api/quote 获取 LI.FI 的交易报价
-   * 4. 检查 ERC20 approve 额度，如不足则先 approve
-   * 5. 从报价中提取 transactionRequest
-   * 6. 如果钱包不在目标链上，触发切换链
-   * 7. 通过 wagmi 的 sendTransactionAsync 发送交易上链
+   * 当 USE_DIRECT_DEPOSIT = true：
+   *   同链同代币时直接调用 vault 合约（ERC4626 deposit / Aave supply）
+   *   无需 LI.FI 路由，gas 极低（~100k-200k）
+   *
+   * 当 USE_DIRECT_DEPOSIT = false：
+   *   使用 LI.FI Composer 路由（支持 swap/跨链）
+   *   原有流程：quote → approve → sendTransaction
    */
   const handleDeposit = async () => {
     if (!selectedVault || !amount || !address) return;
@@ -189,133 +276,176 @@ export default function Home() {
     setErrorMsg('');
 
     try {
-      console.log('1111111111111walletChainId:', walletChainId);
-
-      // 获取金库的底层代币（通常是存入该金库需要的代币）
       const token = selectedVault.underlyingTokens[0];
       if (!token) {
         throw new Error('No underlying token found for this vault');
       }
 
-      // 将人类可读金额转为 wei
-      // 例如：parseUnits("1.5", 18) → 1500000000000000000n
       const decimals = token.decimals;
       const amountWei = parseUnits(amount, decimals);
+      console.log('token:', token.symbol, 'decimals:', decimals, 'amount:', amount, 'amountWei:', amountWei.toString());
 
-      // 调用 /api/quote 获取 LI.FI 的交易报价
-      const res = await fetch(
-        `/api/quote?fromChain=${selectedChain.id}&toChain=${selectedChain.id}&fromToken=${token.address}&toToken=${selectedVault.address}&fromAddress=${address}&toAddress=${address}&fromAmount=${amountWei.toString()}`
-      );
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.details || err.error || 'Failed to get quote');
-      }
-
-      const quote = await res.json();
-
-      // 报价中必须包含 transactionRequest 才能执行交易
-      if (!quote.transactionRequest) {
-        throw new Error('No transaction request in quote response');
-      }
-
-      const tx = quote.transactionRequest;
-
-      // 如果钱包连接的链不是目标链，尝试自动切换
-      const targetChainId = selectedVault.chainId;
-      console.log('walletChainId', walletChainId);
-      if (walletChainId !== targetChainId) {
-        try {
-          await switchChain({ chainId: targetChainId });
-        } catch {
-          throw new Error(
-            `Please switch your wallet to ${
-              CHAINS.find((c) => c.id === targetChainId)?.name || 'the target'
-            } chain manually`
-          );
+      // ─── 模式 A: 直接存款（低 gas） ───
+      if (USE_DIRECT_DEPOSIT) {
+        // 确保钱包在目标链上
+        const targetChainId = selectedVault.chainId;
+        if (walletChainId !== targetChainId) {
+          try {
+            await switchChain({ chainId: targetChainId });
+          } catch {
+            throw new Error(
+              `Please switch your wallet to ${
+                CHAINS.find((c) => c.id === targetChainId)?.name || 'the target'
+              } chain manually`
+            );
+          }
         }
-      }
 
-      // ─── ERC20 Approve 步骤 ───
-      // LI.FI Composer 需要用户授权才能使用代币。
-      // 从 quote.estimate.approvalAddress 获取需要授权的地址。
-      // 如果 allowance < amount，需要先调用 approve。
-      const approvalAddress = quote.estimate?.approvalAddress;
-      if (approvalAddress && approvalAddress !== '0x0000000000000000000000000000000000000000') {
-        // 创建对应链的 public client（使用 wagmi/chains 的完整链配置）
-        const chainMap: Record<number, typeof base> = {
-          1: mainnet,
-          10: optimism,
-          137: polygon,
-          42161: arbitrum,
-          8453: base,
-          11155111: sepolia,
-          11155420: optimismSepolia,
-          80002: polygonAmoy,
-          84532: baseSepolia,
-          421614: arbitrumSepolia,
-        };
-        const chain = chainMap[selectedVault.chainId];
+        const chain = CHAIN_MAP[targetChainId];
         if (!chain) {
-          throw new Error('Unsupported chain: ' + selectedVault.chainId);
+          throw new Error('Unsupported chain: ' + targetChainId);
         }
         const client = createPublicClient({ chain, transport: http() });
 
-        // 检查当前授权额度
+        // 1. ERC20 approve vault 合约
         const allowance = await client.readContract({
           address: token.address as `0x${string}`,
           abi: erc20Abi,
           functionName: 'allowance',
-          args: [address as `0x${string}`, approvalAddress as `0x${string}`],
+          args: [address as `0x${string}`, selectedVault.address as `0x${string}`],
         });
 
         if ((allowance as bigint) < amountWei) {
-          console.log('Allowance insufficient, approving...');
-          const approveHash = await writeContractAsync({
+          await writeContractAsync({
             address: token.address as `0x${string}`,
             abi: erc20Abi,
             functionName: 'approve',
-            args: [approvalAddress as `0x${string}`, amountWei],
-            chainId: selectedVault.chainId,
+            args: [selectedVault.address as `0x${string}`, amountWei],
+            chainId: targetChainId,
           });
+        }
 
-          // 等待 approve 交易确认
-          await client.waitForTransactionReceipt({ hash: approveHash });
-          console.log('Approval confirmed:', approveHash);
+        // 2. 调用 vault deposit
+        const protocolName = selectedVault.protocol.name.toLowerCase();
+        if (protocolName.includes('aave')) {
+          await writeContractAsync({
+            address: selectedVault.address as `0x${string}`,
+            abi: AAVE_V3_ABI,
+            functionName: 'supply',
+            args: [token.address as `0x${string}`, amountWei, address as `0x${string}`, 0],
+            chainId: targetChainId,
+          });
+        } else {
+          // Morpho, Euler, 和其他 ERC4626 vaults
+          await writeContractAsync({
+            address: selectedVault.address as `0x${string}`,
+            abi: ERC4626_ABI,
+            functionName: 'deposit',
+            args: [amountWei, address],
+            chainId: targetChainId,
+          });
+        }
+
+        // 直接存款完成，更新状态
+        setTxStatus('success');
+        console.log('Direct deposit completed');
+
+        // 保存存款记录
+        if (selectedVault && address && amount) {
+          fetch('/api/deposit-record', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              address,
+              chainId: selectedVault.chainId,
+              vaultAddress: selectedVault.address,
+              protocolName: selectedVault.protocol.name,
+              vaultName: selectedVault.name,
+              network: selectedVault.network,
+              depositedAmountUsd: 0,
+              tokenSymbol: token.symbol,
+              tokenAmount: amount,
+            }),
+          })
+            .then((r) => r.json())
+            .then((data) => {
+              if (data.success) console.log('Deposit record saved');
+              else console.error('Failed to save deposit record:', data.error);
+            })
+            .catch((err) => console.error('Failed to save deposit record:', err));
         }
       }
-      // ─── Approve 完成 ───
+      // ─── 模式 B: LI.FI Composer 路由 ───
+      else {
+        const res = await fetch(
+          `/api/quote?fromChain=${selectedChain.id}&toChain=${selectedChain.id}&fromToken=${token.address}&toToken=${selectedVault.address}&fromAddress=${address}&toAddress=${address}&fromAmount=${amountWei.toString()}`
+        );
 
-      // 发送交易到区块链
-      // to: 交易目标地址（LI.FI 路由合约）
-      // value: 发送的 ETH 数量（如果是 ERC20 代币则为 undefined）
-      // data: 交易数据（包含合约方法调用和参数）
-      const hash = await sendTransactionAsync({
-        to: tx.to as `0x${string}`,
-        value: tx.value ? BigInt(tx.value) : undefined,
-        data: tx.data as `0x${string}`,
-        chainId: selectedVault.chainId,
-      });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.details || err.error || 'Failed to get quote');
+        }
 
-      setTxStatus('success');
-      console.log('Transaction sent:', hash);
+        const quote = await res.json();
 
-      // 保存存款记录到服务器端 SQLite 数据库
-      fetch('/api/deposit-record', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          address,
+        if (!quote.transactionRequest) {
+          throw new Error('No transaction request in quote response');
+        }
+
+        const tx = quote.transactionRequest;
+
+        const targetChainId = selectedVault.chainId;
+        if (walletChainId !== targetChainId) {
+          try {
+            await switchChain({ chainId: targetChainId });
+          } catch {
+            throw new Error(
+              `Please switch your wallet to ${
+                CHAINS.find((c) => c.id === targetChainId)?.name || 'the target'
+              } chain manually`
+            );
+          }
+        }
+
+        // ─── ERC20 Approve 步骤 ───
+        const approvalAddress = quote.estimate?.approvalAddress;
+        if (approvalAddress && approvalAddress !== '0x0000000000000000000000000000000000000000') {
+          const chain = CHAIN_MAP[selectedVault.chainId];
+          if (!chain) {
+            throw new Error('Unsupported chain: ' + selectedVault.chainId);
+          }
+          const client = createPublicClient({ chain, transport: http() });
+
+          const allowance = await client.readContract({
+            address: token.address as `0x${string}`,
+            abi: erc20Abi,
+            functionName: 'allowance',
+            args: [address as `0x${string}`, approvalAddress as `0x${string}`],
+          });
+
+          if ((allowance as bigint) < amountWei) {
+            console.log('Allowance insufficient, approving...');
+            const approveHash = await writeContractAsync({
+              address: token.address as `0x${string}`,
+              abi: erc20Abi,
+              functionName: 'approve',
+              args: [approvalAddress as `0x${string}`, amountWei],
+              chainId: selectedVault.chainId,
+            });
+
+            await client.waitForTransactionReceipt({ hash: approveHash });
+            console.log('Approval confirmed:', approveHash);
+          }
+        }
+
+        // 发送交易
+        await sendTransactionAsync({
+          to: tx.to as `0x${string}`,
+          value: tx.value ? BigInt(tx.value) : undefined,
+          data: tx.data as `0x${string}`,
           chainId: selectedVault.chainId,
-          vaultAddress: selectedVault.address,
-          protocolName: selectedVault.protocol.name,
-          vaultName: selectedVault.name,
-          network: selectedVault.network,
-          depositedAmountUsd: 0,
-          tokenSymbol: token?.symbol || 'Unknown',
-          tokenAmount: amount,
-        }),
-      }).catch((err) => console.error('Failed to save deposit record:', err));
+        });
+      }
     } catch (err: any) {
       console.error(err);
       setTxStatus('error');
@@ -622,7 +752,11 @@ export default function Home() {
               </div>
               <div className="flex justify-between border-t border-gray-700 pt-3">
                 <span className="text-gray-400">Est. Gas Fee</span>
-                <span className="text-sm">~0.005-0.01 ETH</span>
+                <span className="text-sm">
+                  {USE_DIRECT_DEPOSIT
+                    ? '~0.0001 ETH (direct deposit)'
+                    : '~0.005-0.01 ETH (via routing)'}
+                </span>
               </div>
             </div>
 
@@ -630,6 +764,20 @@ export default function Home() {
             {!isConnected && (
               <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 text-yellow-400 text-sm mb-4">
                 Please connect your wallet first
+              </div>
+            )}
+
+            {/* 链不匹配警告 */}
+            {isConnected && walletChainId !== selectedVault.chainId && (
+              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 text-yellow-400 text-sm mb-4">
+                Your wallet is on {CHAINS.find(c => c.id === walletChainId)?.name || `Chain ${walletChainId}`}. Please switch to{' '}
+                <button
+                  onClick={() => switchChain({ chainId: selectedVault.chainId })}
+                  className="underline hover:no-underline font-medium"
+                >
+                  {selectedVault.network}
+                </button>{' '}
+                before depositing.
               </div>
             )}
 

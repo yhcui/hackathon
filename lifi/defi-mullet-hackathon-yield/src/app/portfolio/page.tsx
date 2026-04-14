@@ -72,35 +72,35 @@ export default function PortfolioPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
+  const fetchPortfolio = async () => {
     if (!address) return;
 
-    const fetchPortfolio = async () => {
-      setLoading(true);
-      setError('');
+    setLoading(true);
+    setError('');
 
-      try {
-        const [portfolioRes, depositRes] = await Promise.all([
-          fetch(`/api/portfolio?address=${address}`),
-          fetch(`/api/deposit-record?address=${address}`),
-        ]);
+    try {
+      const [portfolioRes, depositRes] = await Promise.all([
+        fetch(`/api/portfolio?address=${address}`, { cache: 'no-store' }),
+        fetch(`/api/deposit-record?address=${address}`, { cache: 'no-store' }),
+      ]);
 
-        const portfolioData = await portfolioRes.json();
-        if (portfolioData.error) {
-          setError(portfolioData.error);
-        } else {
-          setPositions(portfolioData.positions || []);
-        }
-
-        const depositData = await depositRes.json();
-        setBaselines(depositData.records || []);
-      } catch {
-        setError('Failed to fetch portfolio');
+      const portfolioData = await portfolioRes.json();
+      if (portfolioData.error) {
+        setError(portfolioData.error);
+      } else {
+        setPositions(portfolioData.positions || []);
       }
 
-      setLoading(false);
-    };
+      const depositData = await depositRes.json();
+      setBaselines(depositData.records || []);
+    } catch {
+      setError('Failed to fetch portfolio');
+    }
 
+    setLoading(false);
+  };
+
+  useEffect(() => {
     fetchPortfolio();
   }, [address]);
 
@@ -186,7 +186,25 @@ export default function PortfolioPage() {
               <p className="text-xs text-gray-400">My Portfolio</p>
             </div>
           </div>
-          <ConnectButton />
+          <div className="flex items-center gap-3">
+            {address && (
+              <button
+                onClick={fetchPortfolio}
+                disabled={loading}
+                className="text-sm text-gray-400 hover:text-white transition-colors disabled:opacity-50"
+                title="Refresh"
+              >
+                {loading ? (
+                  <span className="text-gray-500">Loading...</span>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                  </svg>
+                )}
+              </button>
+            )}
+            <ConnectButton />
+          </div>
         </div>
       </header>
 
@@ -247,8 +265,8 @@ export default function PortfolioPage() {
               </div>
             )}
 
-            {/* Empty state */}
-            {mergedPositions.length === 0 && (
+            {/* Empty state - no positions and no baselines */}
+            {mergedPositions.length === 0 && baselines.length === 0 && (
               <div className="bg-gray-900 rounded-xl p-8 border border-gray-800 text-center">
                 <div className="text-4xl mb-4">💰</div>
                 <h2 className="text-lg font-semibold mb-2">No Positions Found</h2>
@@ -262,6 +280,48 @@ export default function PortfolioPage() {
                 >
                   Start Earning
                 </Link>
+              </div>
+            )}
+
+            {/* Show baselines when LI.FI hasn't indexed positions yet */}
+            {mergedPositions.length === 0 && baselines.length > 0 && (
+              <div className="bg-gray-900 rounded-xl p-8 border border-gray-800">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold">Deposit Records</h2>
+                  <span className="text-xs text-gray-400">
+                    LI.FI is indexing your positions, check back shortly
+                  </span>
+                </div>
+                <div className="space-y-3">
+                  {baselines.map((b) => (
+                    <div
+                      key={b.id}
+                      className="bg-gray-800 rounded-lg p-4 border border-gray-700"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="font-medium">
+                            {b.protocolName}
+                            <span className="text-xs text-gray-500 ml-2">
+                              {b.network}
+                            </span>
+                          </div>
+                          <div className="text-xs text-gray-400 mt-1">
+                            Asset: {b.tokenSymbol}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-lg font-bold">
+                            {b.tokenAmount} {b.tokenSymbol}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            Deposited
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
