@@ -17,6 +17,7 @@ import { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { WagmiProvider, createConfig, http } from 'wagmi';
 import { base, arbitrum, mainnet, optimism, polygon, baseSepolia, arbitrumSepolia, sepolia, optimismSepolia, polygonAmoy } from 'wagmi/chains';
+import type { Chain } from 'wagmi/chains';
 import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit';
 
 /**
@@ -27,7 +28,7 @@ import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit';
 const isTestnet = process.env.NEXT_PUBLIC_USE_TESTNET === 'true';
 
 // 根据环境变量选择链列表
-const chains = isTestnet
+const chains: readonly [Chain, ...Chain[]] = isTestnet
   ? [baseSepolia, arbitrumSepolia, sepolia, optimismSepolia, polygonAmoy]
   : [base, arbitrum, mainnet, optimism, polygon];
 

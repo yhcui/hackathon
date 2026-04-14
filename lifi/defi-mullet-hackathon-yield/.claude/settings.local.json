@@ -14,7 +14,12 @@
       "WebSearch",
       "Bash(xargs kill:*)",
       "Bash(netstat -ano)",
-      "Bash(taskkill //PID 42208 //F)"
+      "Bash(taskkill //PID 42208 //F)",
+      "WebFetch(domain:apidocs.li.fi)",
+      "Bash(npx tsc:*)",
+      "Bash(pkill -f \"next dev\")",
+      "Bash(npm -v)",
+      "Bash(npm start:*)"
     ]
   }
 }

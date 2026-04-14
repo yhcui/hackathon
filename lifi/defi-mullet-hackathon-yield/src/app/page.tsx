@@ -20,9 +20,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useAccount, useSendTransaction, useSwitchChain } from 'wagmi';
-import { parseUnits } from 'viem';
+import { useAccount, useSendTransaction, useSwitchChain, useWriteContract } from 'wagmi';
+import { parseUnits, erc20Abi, createPublicClient, http } from 'viem';
 
 /**
  * 支持的链列表
@@ -89,6 +90,8 @@ export default function Home() {
   const { switchChain } = useSwitchChain();
   /** useSendTransaction: 发送普通交易（非合约调用） */
   const { sendTransactionAsync } = useSendTransaction();
+  /** useWriteContract: 调用合约方法（用于 approve） */
+  const { writeContractAsync } = useWriteContract();
 
   // ──────────────────────────────────────────
   // React 状态管理
@@ -170,9 +173,10 @@ export default function Home() {
    * 1. 获取金库的底层代币信息
    * 2. 将用户输入的人类可读金额（如 "1.5"）转为 wei（如 "1500000000000000000"）
    * 3. 调用 /api/quote 获取 LI.FI 的交易报价
-   * 4. 从报价中提取 transactionRequest
-   * 5. 如果钱包不在目标链上，触发切换链
-   * 6. 通过 wagmi 的 sendTransactionAsync 发送交易上链
+   * 4. 检查 ERC20 approve 额度，如不足则先 approve
+   * 5. 从报价中提取 transactionRequest
+   * 6. 如果钱包不在目标链上，触发切换链
+   * 7. 通过 wagmi 的 sendTransactionAsync 发送交易上链
    */
   const handleDeposit = async () => {
     if (!selectedVault || !amount || !address) return;
@@ -225,6 +229,43 @@ export default function Home() {
         }
       }
 
+      // ─── ERC20 Approve 步骤 ───
+      // LI.FI Composer 需要用户授权才能使用代币。
+      // 从 quote.estimate.approvalAddress 获取需要授权的地址。
+      // 如果 allowance < amount，需要先调用 approve。
+      const approvalAddress = quote.estimate?.approvalAddress;
+      if (approvalAddress && approvalAddress !== '0x0000000000000000000000000000000000000000') {
+        // 动态创建 publicClient 用于读取链上数据
+        const client = createPublicClient({
+          chain: { id: selectedVault.chainId } as any,
+          transport: http(),
+        });
+
+        // 检查当前授权额度
+        const allowance = await client.readContract({
+          address: token.address as `0x${string}`,
+          abi: erc20Abi,
+          functionName: 'allowance',
+          args: [address as `0x${string}`, approvalAddress as `0x${string}`],
+        });
+
+        if ((allowance as bigint) < amountWei) {
+          console.log('Allowance insufficient, approving...');
+          const approveHash = await writeContractAsync({
+            address: token.address as `0x${string}`,
+            abi: erc20Abi,
+            functionName: 'approve',
+            args: [approvalAddress as `0x${string}`, amountWei],
+            chainId: selectedVault.chainId,
+          });
+
+          // 等待 approve 交易确认
+          await client.waitForTransactionReceipt({ hash: approveHash });
+          console.log('Approval confirmed:', approveHash);
+        }
+      }
+      // ─── Approve 完成 ───
+
       // 发送交易到区块链
       // to: 交易目标地址（LI.FI 路由合约）
       // value: 发送的 ETH 数量（如果是 ERC20 代币则为 undefined）
@@ -238,6 +279,23 @@ export default function Home() {
 
       setTxStatus('success');
       console.log('Transaction sent:', hash);
+
+      // 保存存款记录到服务器端 SQLite 数据库
+      fetch('/api/deposit-record', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          address,
+          chainId: selectedVault.chainId,
+          vaultAddress: selectedVault.address,
+          protocolName: selectedVault.protocol.name,
+          vaultName: selectedVault.name,
+          network: selectedVault.network,
+          depositedAmountUsd: 0,
+          tokenSymbol: token?.symbol || 'Unknown',
+          tokenAmount: amount,
+        }),
+      }).catch((err) => console.error('Failed to save deposit record:', err));
     } catch (err: any) {
       console.error(err);
       setTxStatus('error');
@@ -287,7 +345,15 @@ export default function Home() {
             <p className="text-xs text-gray-400">One-click yield deposit</p>
           </div>
           {/* RainbowKit 提供的钱包连接按钮 */}
-          <ConnectButton />
+          <div className="flex items-center gap-4">
+            <Link
+              href="/portfolio"
+              className="text-sm text-gray-400 hover:text-indigo-400 transition-colors"
+            >
+              My Portfolio
+            </Link>
+            <ConnectButton />
+          </div>
         </div>
       </header>
 
