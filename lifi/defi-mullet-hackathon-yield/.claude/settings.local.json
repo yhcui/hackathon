@@ -26,7 +26,12 @@
       "Bash(python3 -c \" import sys, json data = json.load\\(sys.stdin\\) print\\('=== transactionRequest ==='\\) print\\('chainId:', data.get\\('transactionRequest', {}\\).get\\('chainId'\\)\\) print\\('to:', data.get\\('transactionRequest', {}\\).get\\('to'\\)\\) print\\('value:', data.get\\('transactionRequest', {}\\).get\\('value'\\)\\) print\\(\\) print\\('=== action ==='\\) print\\('fromChainId:', data.get\\('action', {}\\).get\\('fromChainId'\\)\\) print\\('toChainId:', data.get\\('action', {}\\).get\\('toChainId'\\)\\) print\\('fromToken chainId:', data.get\\('action', {}\\).get\\('fromToken', {}\\).get\\('chainId'\\)\\) print\\('toToken chainId:', data.get\\('action', {}\\).get\\('toToken', {}\\).get\\('chainId'\\)\\) print\\(\\) print\\('=== gasCosts ==='\\) for gc in data.get\\('estimate', {}\\).get\\('gasCosts', []\\): print\\('price:', gc.get\\('price'\\), '\\(wei\\)'\\) print\\('estimate:', gc.get\\('estimate'\\)\\) print\\('limit:', gc.get\\('limit'\\)\\) print\\('amount:', gc.get\\('amount'\\)\\) print\\('amountUSD:', gc.get\\('amountUSD'\\)\\) print\\('token chainId:', gc.get\\('token', {}\\).get\\('chainId'\\)\\) print\\('token symbol:', gc.get\\('token', {}\\).get\\('symbol'\\)\\) print\\(\\) print\\('=== includedSteps ==='\\) for step in data.get\\('includedSteps', []\\): print\\('step type:', step.get\\('type'\\)\\) print\\('step action fromChainId:', step.get\\('action', {}\\).get\\('fromChainId'\\)\\) print\\('step action toChainId:', step.get\\('action', {}\\).get\\('toChainId'\\)\\) if 'estimate' in step and 'gasCosts' in step['estimate']: for gc in step['estimate']['gasCosts']: print\\(' gas price:', gc.get\\('price'\\), '\\(wei\\) =', gc.get\\('price'\\)/1e9, 'gwei'\\) print\\(' gas limit:', gc.get\\('limit'\\)\\) print\\(' gas amountUSD:', gc.get\\('amountUSD'\\)\\) print\\(' gas token chainId:', gc.get\\('token', {}\\).get\\('chainId'\\)\\) \")",
       "Bash(python3 -c ':*)",
       "Bash(node:*)",
-      "Bash(npx next:*)"
+      "Bash(npx next:*)",
+      "Bash(findstr :4000)",
+      "Bash(taskkill:*)",
+      "Bash(kill 9608:*)",
+      "Bash(findstr LISTENING)",
+      "Bash(powershell:*)"
     ]
   }
 }

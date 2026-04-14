@@ -139,9 +139,9 @@ export default function PortfolioPage() {
       depositedUsd: totalDepositedUsd,
       tokenSymbol: pos.asset.symbol,
       tokenAmount: matchingBaselines
-        .map((b) => b.tokenAmount)
-        .filter(Boolean)
-        .join(', '),
+        .reduce((sum, b) => sum + parseFloat(b.tokenAmount || '0'), 0)
+        .toFixed(6)
+        .replace(/\.?0+$/, ''),
       yieldUsd,
       yieldPercent,
       hasBaseline: matchingBaselines.length > 0,
@@ -298,34 +298,51 @@ export default function PortfolioPage() {
                   </span>
                 </div>
                 <div className="space-y-3">
-                  {baselines.map((b) => (
-                    <div
-                      key={b.id}
-                      className="bg-gray-800 rounded-lg p-4 border border-gray-700"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <div className="font-medium">
-                            {b.protocolName}
-                            <span className="text-xs text-gray-500 ml-2">
-                              {b.network}
-                            </span>
+                  {Object.entries(
+                    baselines.reduce<Record<string, DepositRecord[]>>(
+                      (acc, b) => {
+                        const key = `${b.chainId}-${b.protocolName}-${b.vaultAddress}`;
+                        if (!acc[key]) acc[key] = [];
+                        acc[key].push(b);
+                        return acc;
+                      },
+                      {}
+                    )
+                  ).map(([key, group]) => {
+                    const totalAmount = group.reduce(
+                      (sum, b) => sum + parseFloat(b.tokenAmount || '0'),
+                      0
+                    );
+                    const b = group[0];
+                    return (
+                      <div
+                        key={key}
+                        className="bg-gray-800 rounded-lg p-4 border border-gray-700"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <div className="font-medium">
+                              {b.protocolName}
+                              <span className="text-xs text-gray-500 ml-2">
+                                {b.network}
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-400 mt-1">
+                              Asset: {b.tokenSymbol} · {group.length} deposit{group.length > 1 ? 's' : ''}
+                            </div>
                           </div>
-                          <div className="text-xs text-gray-400 mt-1">
-                            Asset: {b.tokenSymbol}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-lg font-bold">
-                            {b.tokenAmount} {b.tokenSymbol}
-                          </div>
-                          <div className="text-xs text-gray-400">
-                            Deposited
+                          <div className="text-right">
+                            <div className="text-lg font-bold">
+                              {totalAmount.toFixed(6)} {b.tokenSymbol}
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              Total Deposited
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
